@@ -33,7 +33,7 @@ body {
     height: 15mm;
     align-items: center;
     backdrop-filter: blur(15px);
-
+    z-index: 99999999;
 }
 
 #website-logo {
@@ -51,7 +51,7 @@ body {
     font-weight: bold;
     text-align: center;
     width: 100%;
-    font-size: 7mm
+    font-size: 7mm;
 }
 
 #connect-calculator-svg {
@@ -59,18 +59,63 @@ body {
     margin-right: auto;
     height: 15cm;
     margin-top: 10mm;
-    animation: spawn-connect-calcualtor-svg ease-out 500ms 200ms forwards;
+    animation: spawn-fade-down ease-out 500ms 200ms forwards;
     opacity: 0;
 }
 
-@keyframes spawn-connect-calcualtor-svg {
+@keyframes spawn-fade-down {
     0% {
         opacity: 0;
-        transform: translateY(-2cm);
+        transform: translateY(-1cm);
     }
 
     100% {
         opacity: 1;
         transform: translateY(0cm);
     }
+}
+
+@keyframes despawn-fade-down {
+    0% {
+        opacity: 1;
+        transform: translateY(0cm);
+    }
+
+    99% {
+        opacity: 0;
+        transform: translateY(1cm);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(1cm);
+        display: none;
+    }
+}
+
+.fade-down-despawn {
+   animation: despawn-fade-down ease-out 500ms 200ms forwards;
+   opacity: 1;
+}
+
+#connect-button {
+    width: 80mm;
+    height: 12mm;
+    font-size: 7mm;
+    background-color: var(--primary-color);
+    border: solid var(--third-color) 2px;
+    border-radius: 2mm;
+    color: inherit;
+    cursor: pointer;
+    transition: background-color ease 200ms;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 8mm;
+}
+#connect-button:hover {
+    background-color: var(--second-color);
+}
+
+#connect-page-div {
+    display: flex;
+    flex-direction: column;
 }
