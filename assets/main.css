@@ -75,7 +75,7 @@ body {
     }
 }
 
-@keyframes despawn-fade-down {
+@keyframes page-despawn-fade-down {
     0% {
         opacity: 1;
         transform: translateY(0cm);
@@ -85,6 +85,7 @@ body {
         opacity: 0;
         transform: translateY(1cm);
     }
+
     100% {
         opacity: 0;
         transform: translateY(1cm);
@@ -93,8 +94,8 @@ body {
 }
 
 .fade-down-despawn {
-   animation: despawn-fade-down ease-out 500ms 200ms forwards;
-   opacity: 1;
+    animation: page-despawn-fade-down ease-out 500ms 200ms forwards;
+    opacity: 1;
 }
 
 #connect-button {
@@ -111,6 +112,7 @@ body {
     margin-right: auto;
     margin-top: 8mm;
 }
+
 #connect-button:hover {
     background-color: var(--second-color);
 }
@@ -118,4 +120,52 @@ body {
 #connect-page-div {
     display: flex;
     flex-direction: column;
+}
+
+#list-worlds-page-div {
+    opacity: 0;
+    display: none;
+    flex-direction: column;
+}
+
+@keyframes page-spawn-fade-down {
+    0% {
+        opacity: 0;
+        transform: translateY(-1cm);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0cm);
+    }
+}
+
+.page-spawn-fade-down {
+    display: flex !important;
+    animation: page-spawn-fade-down ease-out 500ms 700ms forwards;
+}
+
+#worlds-list-div {
+    display: block;
+    margin-top: 5mm;
+}
+
+.worlds-list-element {
+    background-color: var(--primary-color);
+    border: solid var(--second-color) 2px;
+    border-radius: 5mm;
+    height: 20mm;
+    display: flex;
+    align-items: center;
+    flex-direction: row;
+    padding: 2mm;
+    width: 200mm;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 5mm;
+}
+
+.worlds-list-element span {
+    margin-left: auto;
+    margin-right: auto;
 }
