@@ -4,6 +4,16 @@
     --primary-color: rgb(27, 38, 59);
     --second-color: rgb(65, 90, 119);
     --third-color: rgb(119, 141, 169);
+    
+    /*Dioxus alert box colors*/
+    --alert-primary-color-2: var(--primary-color);
+    --alert-primary-error-color: rgb(200, 0, 0);
+    --alert-secondary-error-color: rgb(150, 20, 20);
+    --alert-focused-border-color: rgb(0, 0, 0);
+    --alert-primary-color-4: rgb(150, 150, 150);
+
+    --alert-primary-color: rgb(100, 100, 100);
+    --alert-primary-color-3: rgb(100, 100, 100);
 }
 
 body {
@@ -163,9 +173,18 @@ body {
     margin-left: auto;
     margin-right: auto;
     margin-top: 5mm;
+    padding-left: 10mm;
 }
 
 .worlds-list-element span {
-    margin-left: auto;
-    margin-right: auto;
+    width: 100mm;
+    text-wrap-mode: nowrap;
+    overflow-x: hidden;
+}
+
+.world-button-icon {
+    height: 10mm;
+    cursor: pointer;
+    margin-right: 2mm;
+    margin-left: 2mm;
 }

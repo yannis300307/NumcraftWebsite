@@ -1,8 +1,8 @@
 use dioxus::{logger::tracing, prelude::*};
-use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::deserializer::WorldInfo;
+use crate::{components::alert_dialog::*, deserializer::WorldInfo};
 
+mod components;
 mod deserializer;
 mod js_utils;
 
@@ -12,6 +12,9 @@ const UPSILON_JS: Asset = asset!(
     "/assets/libs/upsilon.bundle.js",
     JsAssetOptions::new().with_minify(false)
 );
+
+const DOWNLOAD_ICON_SVG: Asset = asset!("/assets/download.svg");
+const DELETE_ICON_SVG: Asset = asset!("/assets/delete.svg");
 
 static LOGO: Asset = asset!("/assets/logo.svg");
 static CONNECT_CALCULATOR_SVG: Asset = asset!("/assets/connect_calculator.svg");
@@ -109,6 +112,8 @@ fn ListWorldsPage(
     calculator_connected: Signal<bool>,
     worlds_list: Signal<Vec<(usize, String, Vec<u8>, WorldInfo)>>,
 ) -> Element {
+    let mut open = use_signal(|| false);
+    let mut selected_world = use_signal(|| "".to_string());
     rsx!(
         div {
             id: "list-worlds-page-div",
@@ -117,13 +122,29 @@ fn ListWorldsPage(
 
             div { id: "worlds-list-div",
                     for i in 0..(*worlds_list.read()).len() {
-                        div { key: format!("worlds-list-div-{}", i), class: "worlds-list-element",
-                        span { {format!("{}.ncw", worlds_list.read()[i].1) } }
-                        span { {format!("{}", worlds_list.read()[i].3.world_name) } }
-                        span { {format!("{}", worlds_list.read()[i].3.world_version.get_matching_name()) } }
+                        div { key: "{i}", class: "worlds-list-element",
+                        span { {format!("File Name: {}.ncw", worlds_list.read()[i].1) } }
+                        span { {format!("World Name: {}", worlds_list.read()[i].3.world_name) } }
+                        span { {format!("Version: {}", worlds_list.read()[i].3.world_version.get_matching_name()) } }
+                        a { onclick: |_| {tracing::info!("download")},
+                            img { class: "world-button-icon", src: DOWNLOAD_ICON_SVG }
+                        }
+                        a { onclick: move |_| {selected_world.set(worlds_list.read()[i].3.world_name.clone()); open.set(true)},
+                            img { class: "world-button-icon", src: DELETE_ICON_SVG }
+                        }
                     }
                 }
             }
         }
+        AlertDialogRoot { open: *open.read(), on_open_change: move |v| open.set(v),
+        AlertDialogContent {
+            AlertDialogTitle { "Are you sure?" }
+            AlertDialogDescription { "You are about to delete the world `{selected_world}`. This action cannot be undone." }
+            AlertDialogActions {
+                AlertDialogCancel { "Cancel" }
+                AlertDialogAction { "Delete" }
+            }
+        }
+    }
     )
 }
