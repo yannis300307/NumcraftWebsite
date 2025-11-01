@@ -1033,7 +1033,7 @@
 		    }
 
 		    async __encodePyRecord(record) {
-		        var content = new TextEncoder("utf-8").encode(record.code);
+		        var content = new TextEncoder("utf-8").encode(record.code.normalize('NFKD'));
 
 		        record.data = new Blob([
 		            concatTypedArrays(
@@ -1067,7 +1067,9 @@
 		            var name = record.name + "." + record.type;
 
 		            var encoded_name = concatTypedArrays(
-		                encoder.encode(name),
+		                // We remove non-ASCII characters as they often cause calculator crashs
+		                // Upsilon.js don't support reading non-ASCII filenames
+		                encoder.encode(name.replace(/[^\x00-\x7F]/g, "")),
 		                new Uint8Array([0])
 		            );
 
@@ -1184,7 +1186,9 @@
 		        var dv = new DataView(await record.data.arrayBuffer());
 
 		        record.autoImport = dv.getUint8(0) !== 0;
-		        record.code = this.__readString(dv, 1, record.data.size - 1).content;
+
+		        var codeDataview = new DataView(await record.data.slice(1, record.data.size - 1).arrayBuffer());
+		        record.code = new TextDecoder("utf-8").decode(codeDataview);
 
 		        delete record.data;
 
@@ -1950,7 +1954,7 @@
 		        }
 		        if (!magikFound) {
 		            data["magik"] = false;
-		            console.warn("No usermand magic");
+		            console.warn("No userland magic");
 		            return data
 		        }
 
@@ -2090,7 +2094,7 @@
 
 		        const magik = 0xBADBEEEF;
 		        // Hack to handle corrupted slotInfo magik on old Upsilon Bootloader versions (pre 1.0.13)
-		        data["slot"]["magik"] = (dv.getUint32(0x00, false) == magik) || (data["slot"]["magik"] = dv.getUint24(0x01, false) == 0xDBEEEF08);
+		        data["slot"]["magik"] = (dv.getUint32(0x00, false) == magik) || ((dv.getUint32(0x00, false) & 0x00FFFFFF) == (magik & 0x00FFFFFF));
 		        // Check if the data is valid
 		        if (data["slot"]["magik"]) {
 		            // Check if the end magic is present
@@ -2248,12 +2252,23 @@
 		     *
 		     * @param   address     Storage address
 		     * @param   size        Storage size.
+		     * @param   version     Calculator version
 		     *
 		     * @return  The storage, as a Blob.
 		     */
-		    async __retrieveStorage(address, size) {
+		    async __retrieveStorage(address, size, version) {
+		        if (version >= "24.2.0") {
+		            await this.device.device_.selectAlternateInterface(this.device.intfNumber, 1);
+		        }
+
 		        this.device.startAddress = address;
-		        return await this.device.do_upload(this.transferSize, size + 8);
+		        let data = await this.device.do_upload(this.transferSize, size + 8);
+
+		        if (version >= "24.2.0") {
+		            await this.device.device_.selectAlternateInterface(this.device.intfNumber, 0);
+		        }
+
+		        return data
 		    }
 
 		    /**
@@ -2261,10 +2276,19 @@
 		     *
 		     * @param   address     Storage address
 		     * @param   data        Storage data.
+		     * @param   version     Calculator version
 		     */
-		    async __flashStorage(address, data) {
+		    async __flashStorage(address, data, version) {
+		        if (version >= "24.2.0") {
+		            await this.device.device_.selectAlternateInterface(this.device.intfNumber, 1);
+		        }
+
 		        this.device.startAddress = address;
 		        await this.device.do_download(this.transferSize, data, false);
+
+		        if (version >= "24.2.0") {
+		            await this.device.device_.selectAlternateInterface(this.device.intfNumber, 0);
+		        }
 		    }
 
 		    /**
@@ -2279,7 +2303,7 @@
 		        let pinfo = await this.getPlatformInfo();
 
 		        let storage_blob = await storage.encodeStorage(pinfo["storage"]["size"]);
-		        await this.__flashStorage(pinfo["storage"]["address"], await storage_blob.arrayBuffer());
+		        await this.__flashStorage(pinfo["storage"]["address"], await storage_blob.arrayBuffer(), pinfo["version"]);
 
 		        callback();
 		    }
@@ -2292,7 +2316,7 @@
 		    async backupStorage() {
 		        let pinfo = await this.getPlatformInfo();
 
-		        let storage_blob = await this.__retrieveStorage(pinfo["storage"]["address"], pinfo["storage"]["size"]);
+		        let storage_blob = await this.__retrieveStorage(pinfo["storage"]["address"], pinfo["storage"]["size"], pinfo["version"]);
 
 		        let storage = new Numworks.Storage();
 

@@ -174,12 +174,18 @@ body {
     margin-right: auto;
     margin-top: 5mm;
     padding-left: 10mm;
+    transition: background-color 300ms ease;
+}
+
+.worlds-list-element:hover {
+    background-color: var(--second-color);
 }
 
 .worlds-list-element span {
     width: 100mm;
     text-wrap-mode: nowrap;
     overflow-x: hidden;
+    font-size: 5mm;
 }
 
 .world-button-icon {
@@ -187,4 +193,10 @@ body {
     cursor: pointer;
     margin-right: 2mm;
     margin-left: 2mm;
+    transform: scale(1);
+    transition: transform ease 200ms;
+}
+
+.world-button-icon:hover {
+    transform: scale(1.1);
 }

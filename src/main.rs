@@ -113,7 +113,7 @@ fn ListWorldsPage(
     worlds_list: Signal<Vec<(usize, String, Vec<u8>, WorldInfo)>>,
 ) -> Element {
     let mut open = use_signal(|| false);
-    let mut selected_world = use_signal(|| "".to_string());
+    let mut selected_world: Signal<Option<usize>> = use_signal(|| None);
     rsx!(
         div {
             id: "list-worlds-page-div",
@@ -129,7 +129,7 @@ fn ListWorldsPage(
                         a { onclick: |_| {tracing::info!("download")},
                             img { class: "world-button-icon", src: DOWNLOAD_ICON_SVG }
                         }
-                        a { onclick: move |_| {selected_world.set(worlds_list.read()[i].3.world_name.clone()); open.set(true)},
+                        a { onclick: move |_| {selected_world.set(Some(i)); open.set(true)},
                             img { class: "world-button-icon", src: DELETE_ICON_SVG }
                         }
                     }
@@ -139,10 +139,22 @@ fn ListWorldsPage(
         AlertDialogRoot { open: *open.read(), on_open_change: move |v| open.set(v),
         AlertDialogContent {
             AlertDialogTitle { "Are you sure?" }
-            AlertDialogDescription { "You are about to delete the world `{selected_world}`. This action cannot be undone." }
+            AlertDialogDescription { {
+                if let Some(index) = *selected_world.read() {
+                    format!("You are about to delete the world `{}`. This action cannot be undone.", worlds_list.read()[index].3.world_name)
+                } else {
+                    "".to_string()
+                }
+            } }
             AlertDialogActions {
                 AlertDialogCancel { "Cancel" }
-                AlertDialogAction { "Delete" }
+                AlertDialogAction { on_click: move |_| async move {
+                    let world_index = (*selected_world.read()).expect("The page is broken.");
+                    if let Some(record) = (*worlds_list.read()).get(world_index) {
+                        let record_index = record.0;
+                        document::eval(format!("window.storage.records.splice({record_index}, 1); await window.calculator.installStorage(window.storage, function () {{console.log('azhfrsfjdhgqfopijdghkjfqeviofkdjjsdfbukdfjn ?')}}); return null;").as_str()).await.unwrap();
+                    }
+                }, "Delete" }
             }
         }
     }
