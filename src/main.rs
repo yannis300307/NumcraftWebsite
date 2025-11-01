@@ -19,6 +19,21 @@ const DELETE_ICON_SVG: Asset = asset!("/assets/delete.svg");
 static LOGO: Asset = asset!("/assets/logo.svg");
 static CONNECT_CALCULATOR_SVG: Asset = asset!("/assets/connect_calculator.svg");
 
+#[derive(Debug, Clone)]
+pub struct WorldRecord {
+    pub record_index: usize,
+    pub file_name: String,
+    pub world_data: Vec<u8>,
+    pub world_info: WorldInfo,
+    pub need_remove: bool,
+}
+
+impl WorldRecord {
+    pub fn new(record_index: usize, file_name: String, world_data: Vec<u8>, world_info: WorldInfo, need_remove: bool) -> Self {
+        WorldRecord {record_index, file_name, world_data, world_info, need_remove}
+    }
+}
+
 fn main() {
     dioxus::launch(App);
 }
@@ -27,7 +42,7 @@ fn main() {
 fn App() -> Element {
     let supported_browser = js_utils::is_usb_supported();
     let calculator_connected = use_signal(|| false);
-    let worlds_list: Signal<Vec<(usize, String, Vec<u8>, WorldInfo)>> = use_signal(|| Vec::new());
+    let worlds_list: Signal<Vec<WorldRecord>> = use_signal(Vec::new);
 
     rsx! {
         document::Stylesheet { href: CSS }
@@ -52,7 +67,7 @@ fn App() -> Element {
 #[component]
 fn ConnectPage(
     calculator_connected: Signal<bool>,
-    worlds_list: Signal<Vec<(usize, String, Vec<u8>, WorldInfo)>>,
+    worlds_list: Signal<Vec<WorldRecord>>,
 ) -> Element {
     rsx!(
         div {
@@ -93,7 +108,7 @@ fn ConnectPage(
                         let name: String = eval.recv().await.expect("An error occured during the download of the records.");
                         let data: Vec<u8> = eval.recv().await.expect("An error occured during the download of the records.");
                         if let Some(world_info) = deserializer::get_world_info(&data) {
-                            worlds_list.write().push((index, name, data, world_info));
+                            worlds_list.write().push(WorldRecord::new(index, name, data, world_info, false));
                         } else {
                             tracing::warn!("Invalid world info detected.");
                         }
@@ -110,7 +125,7 @@ fn ConnectPage(
 #[component]
 fn ListWorldsPage(
     calculator_connected: Signal<bool>,
-    worlds_list: Signal<Vec<(usize, String, Vec<u8>, WorldInfo)>>,
+    worlds_list: Signal<Vec<WorldRecord>>,
 ) -> Element {
     let mut open = use_signal(|| false);
     let mut selected_world: Signal<Option<usize>> = use_signal(|| None);
@@ -122,10 +137,10 @@ fn ListWorldsPage(
 
             div { id: "worlds-list-div",
                     for i in 0..(*worlds_list.read()).len() {
-                        div { key: "{i}", class: "worlds-list-element",
-                        span { {format!("File Name: {}.ncw", worlds_list.read()[i].1) } }
-                        span { {format!("World Name: {}", worlds_list.read()[i].3.world_name) } }
-                        span { {format!("Version: {}", worlds_list.read()[i].3.world_version.get_matching_name()) } }
+                        div { key: "{i}", class: "worlds-list-element", class: if worlds_list.read()[i].need_remove {"removed-world-record"} else {""},
+                        span { {format!("File Name: {}.ncw", worlds_list.read()[i].file_name) } }
+                        span { {format!("World Name: {}", worlds_list.read()[i].world_info.world_name) } }
+                        span { {format!("Version: {}", worlds_list.read()[i].world_info.world_version.get_matching_name()) } }
                         a { onclick: |_| {tracing::info!("download")},
                             img { class: "world-button-icon", src: DOWNLOAD_ICON_SVG }
                         }
@@ -141,7 +156,7 @@ fn ListWorldsPage(
             AlertDialogTitle { "Are you sure?" }
             AlertDialogDescription { {
                 if let Some(index) = *selected_world.read() {
-                    format!("You are about to delete the world `{}`. This action cannot be undone.", worlds_list.read()[index].3.world_name)
+                    format!("You are about to delete the world `{}`. This action cannot be undone.", worlds_list.read()[index].world_info.world_name)
                 } else {
                     "".to_string()
                 }
@@ -150,9 +165,10 @@ fn ListWorldsPage(
                 AlertDialogCancel { "Cancel" }
                 AlertDialogAction { on_click: move |_| async move {
                     let world_index = (*selected_world.read()).expect("The page is broken.");
-                    if let Some(record) = (*worlds_list.read()).get(world_index) {
-                        let record_index = record.0;
-                        document::eval(format!("window.storage.records.splice({record_index}, 1); await window.calculator.installStorage(window.storage, function () {{console.log('azhfrsfjdhgqfopijdghkjfqeviofkdjjsdfbukdfjn ?')}}); return null;").as_str()).await.unwrap();
+                    if let Some(record) = worlds_list.write().get_mut(world_index) {
+                        let record_index = record.record_index;
+                        record.need_remove = true;
+                        document::eval(format!("window.storage.records.splice({record_index}, 1); await window.calculator.installStorage(window.storage, function () {{}}); return null;").as_str()).await.unwrap();
                     }
                 }, "Delete" }
             }

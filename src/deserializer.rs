@@ -6,7 +6,7 @@ pub enum GameMode {
     Creative,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum WorldVersion {
     V0_0_7_,
     V0_1_0,
@@ -26,7 +26,7 @@ impl WorldVersion {
 }
 
 // Generic
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WorldInfo {
     pub world_version: WorldVersion,
     pub world_name: String,
@@ -77,29 +77,29 @@ pub fn get_world_info(raw: &Vec<u8>) -> Option<WorldInfo> {
 
     // Try different versions
     if let Ok(world_info) =
-        postcard::from_bytes::<WorldInfo3>(&raw.get(2..(2 + world_info_size as usize))?)
+        postcard::from_bytes::<WorldInfo3>(raw.get(2..(2 + world_info_size as usize))?)
     {
-        return Some(WorldInfo {
+        Some(WorldInfo {
             world_version: get_version_from_version_number(world_info.world_version),
             world_name: world_info.world_name,
             gamemode: world_info.gamemode,
-        });
+        })
     } else if let Ok(world_info) =
-        postcard::from_bytes::<WorldInfo2>(&raw.get(2..(2 + world_info_size as usize))?)
+        postcard::from_bytes::<WorldInfo2>(raw.get(2..(2 + world_info_size as usize))?)
     {
-        return Some(WorldInfo {
+        Some(WorldInfo {
             world_version: WorldVersion::V0_1_0,
             world_name: world_info.world_name,
             gamemode: world_info.gamemode,
-        });
+        })
     } else if let Ok(world_info) =
-        postcard::from_bytes::<WorldInfo1>(&raw.get(2..(2 + world_info_size as usize))?)
+        postcard::from_bytes::<WorldInfo1>(raw.get(2..(2 + world_info_size as usize))?)
     {
-        return Some(WorldInfo {
+        Some(WorldInfo {
             world_version: WorldVersion::V0_0_7_,
             world_name: world_info.world_name,
             gamemode: GameMode::Creative,
-        });
+        })
     } else {
         None
     }

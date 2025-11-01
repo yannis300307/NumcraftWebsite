@@ -200,3 +200,29 @@ body {
 .world-button-icon:hover {
     transform: scale(1.1);
 }
+
+.removed-world-record {
+    animation: removed-world-record 800ms ease-in forwards;
+}
+
+@keyframes removed-world-record {
+    0% {
+        transform: translateX(0mm);
+        opacity: 1;
+        margin-top: 5mm;
+    }
+
+    60% {
+        transform: translateX(20mm);
+        opacity: 0;
+        max-height: 30mm;
+        margin-top: 5mm;
+    }
+
+    100% {
+        max-height: 0mm;
+        transform: translateX(20mm);
+        opacity: 0;
+        margin-top: 0mm;
+    }
+}
