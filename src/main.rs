@@ -29,8 +29,20 @@ pub struct WorldRecord {
 }
 
 impl WorldRecord {
-    pub fn new(record_index: usize, file_name: String, world_data: Vec<u8>, world_info: WorldInfo, need_remove: bool) -> Self {
-        WorldRecord {record_index, file_name, world_data, world_info, need_remove}
+    pub fn new(
+        record_index: usize,
+        file_name: String,
+        world_data: Vec<u8>,
+        world_info: WorldInfo,
+        need_remove: bool,
+    ) -> Self {
+        WorldRecord {
+            record_index,
+            file_name,
+            world_data,
+            world_info,
+            need_remove,
+        }
     }
 }
 
@@ -170,6 +182,9 @@ fn ListWorldsPage(
                         record.need_remove = true;
                         document::eval(format!("window.storage.records.splice({record_index}, 1); await window.calculator.installStorage(window.storage, function () {{}}); return null;").as_str()).await.unwrap();
                     }
+                    gloo_timers::future::TimeoutFuture::new(800).await;
+                    worlds_list.write().remove(world_index);
+                    selected_world.set(None);
                 }, "Delete" }
             }
         }

@@ -215,14 +215,12 @@ body {
     60% {
         transform: translateX(20mm);
         opacity: 0;
-        max-height: 30mm;
         margin-top: 5mm;
     }
 
     100% {
-        max-height: 0mm;
         transform: translateX(20mm);
         opacity: 0;
-        margin-top: 0mm;
+        margin-top: -25mm;
     }
 }
