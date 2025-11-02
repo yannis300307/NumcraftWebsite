@@ -1,4 +1,4 @@
-use dioxus::{logger::tracing, prelude::*};
+use dioxus::{document::document, logger::tracing, prelude::*};
 
 use crate::{components::alert_dialog::*, deserializer::WorldInfo};
 
@@ -153,7 +153,19 @@ fn ListWorldsPage(
                         span { {format!("File Name: {}.ncw", worlds_list.read()[i].file_name) } }
                         span { {format!("World Name: {}", worlds_list.read()[i].world_info.world_name) } }
                         span { {format!("Version: {}", worlds_list.read()[i].world_info.world_version.get_matching_name()) } }
-                        a { onclick: |_| {tracing::info!("download")},
+                        a { onclick: move |_| async move {
+                            let record_index = worlds_list.read()[i].record_index;
+                            document::eval(format!(r#"
+                                                    var record = window.storage.records[{record_index}];
+                                                    var blob = new Blob([record.data], {{
+                                                        type: "application/octet-stream",
+                                                    }});
+                                                    var link = document.createElement("a");
+                                                    link.href = window.URL.createObjectURL(blob);
+                                                    link.download = record.name + "." + record.type;
+                                                    link.click();
+                                                    return null;"#).as_str()).await.expect("Download failed.");
+                            },
                             img { class: "world-button-icon", src: DOWNLOAD_ICON_SVG }
                         }
                         a { onclick: move |_| {selected_world.set(Some(i)); open.set(true)},
