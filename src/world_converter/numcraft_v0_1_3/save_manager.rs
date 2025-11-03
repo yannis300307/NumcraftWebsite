@@ -49,7 +49,7 @@ impl PlayerData {
         PlayerData {
             pos: (0., 0., 0.),
             rotation: (0., 0.),
-            inventory: Inventory::new(0),
+            inventory: Inventory::new(24),
         }
     }
 }
@@ -58,7 +58,6 @@ pub struct SaveManager {
     chunks_data: [Vec<u8>; 64],
     pub player_data: PlayerData,
     pub world_info: WorldInfo,
-    pub file_name: Option<String>,
 }
 
 impl SaveManager {
@@ -67,7 +66,6 @@ impl SaveManager {
             chunks_data: [const { Vec::new() }; 64],
             player_data: PlayerData::new(),
             world_info: WorldInfo::new(),
-            file_name: None,
         }
     }
 

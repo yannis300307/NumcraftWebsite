@@ -2,7 +2,7 @@ use dioxus::{logger::tracing, prelude::*};
 
 use crate::{
     components::alert_dialog::*,
-    deserializer::{UpdateStatus, WorldInfo},
+    deserializer::{UpdateStatus, WorldInfo}, world_converter::numcraft_v0_1_0::constants::world,
 };
 
 mod components;
@@ -90,6 +90,82 @@ fn App() -> Element {
     }
 }
 
+async fn update_worlds_list(
+    calculator_connected: &mut Signal<bool>,
+    worlds_list: &mut Signal<Vec<WorldRecord>>,
+    need_reconnect: bool,
+) {
+    let mut eval = if need_reconnect {
+        document::eval(
+        r#"if (window.calculator === undefined) {window.calculator = new window.Upsilon()};
+                await window.calculator.detect(async function() {
+                    window.storage = await window.calculator.backupStorage();
+                    dioxus.send(true);
+                    let length = window.storage.records.length;
+                    dioxus.send(length);
+                    for (let i = 0; i < length; i++) {
+                        if (window.storage.records[i].type == "ncw") {
+                            dioxus.send(i);
+                            dioxus.send(window.storage.records[i].name);
+                            let data = Array.from(new Uint8Array(await window.storage.records[i].data.arrayBuffer()));
+                            dioxus.send(data);
+                        }
+                    }
+                }, function(error) {
+                    dioxus.send(false);
+                });
+                "#,
+        )
+        } else {
+            document::eval(
+        r#"window.storage = await window.calculator.backupStorage();
+                    dioxus.send(true);
+                    let length = window.storage.records.length;
+                    dioxus.send(length);
+                    for (let i = 0; i < length; i++) {
+                        if (window.storage.records[i].type == "ncw") {
+                            dioxus.send(i);
+                            dioxus.send(window.storage.records[i].name);
+                            let data = Array.from(new Uint8Array(await window.storage.records[i].data.arrayBuffer()));
+                            dioxus.send(data);
+                        }
+                    }
+                "#)
+        };
+    
+    let connected: bool = eval.recv().await.expect("Page has not loaded correctly.");
+    *calculator_connected.write() = connected;
+    let array_length: usize = eval
+        .recv()
+        .await
+        .expect("An error occured during the download of the records.");
+
+    worlds_list.write().clear();
+
+    for _ in 0..array_length {
+        let index: usize = eval
+            .recv()
+            .await
+            .expect("An error occured during the download of the records.");
+        let name: String = eval
+            .recv()
+            .await
+            .expect("An error occured during the download of the records.");
+        let data: Vec<u8> = eval
+            .recv()
+            .await
+            .expect("An error occured during the download of the records.");
+        if let Some(world_info) = deserializer::get_world_info(&data) {
+            worlds_list
+                .write()
+                .push(WorldRecord::new(index, name, data, world_info, false));
+        } else {
+            tracing::warn!("Invalid world info detected.");
+        }
+    }
+    document::eval(format!("console.log('{:?}')", worlds_list).as_str());
+}
+
 #[component]
 fn ConnectPage(
     calculator_connected: Signal<bool>,
@@ -103,61 +179,7 @@ fn ConnectPage(
 
             button {
                 id: "connect-button",
-                onclick: move |_| async move {
-                    let mut eval = document::eval(
-                        r#"if (window.calculator === undefined) {window.calculator = new window.Upsilon()};
-                        await window.calculator.detect(async function() {
-                            window.storage = await window.calculator.backupStorage();
-                            dioxus.send(true);
-
-
-
-
-
-                            let length = window.storage.records.length;
-                            dioxus.send(length);
-                            for (let i = 0; i < length; i++) {
-                                if (window.storage.records[i].type == "ncw") {
-                                    dioxus.send(i);
-                                    dioxus.send(window.storage.records[i].name);
-                                    let data = Array.from(new Uint8Array(await window.storage.records[i].data.arrayBuffer()));
-                                    dioxus.send(data);
-                                }
-                            }
-                        }, function(error) {
-                            dioxus.send(false);
-                        });
-                        "#,
-                    );
-                    let connected: bool = eval.recv().await.expect("Page has not loaded correctly.");
-                    *calculator_connected.write() = connected;
-                    let array_length: usize = eval
-                        .recv()
-                        .await
-                        .expect("An error occured during the download of the records.");
-                    for _ in 0..array_length {
-                        let index: usize = eval
-                            .recv()
-                            .await
-                            .expect("An error occured during the download of the records.");
-                        let name: String = eval
-                            .recv()
-                            .await
-                            .expect("An error occured during the download of the records.");
-                        let data: Vec<u8> = eval
-                            .recv()
-                            .await
-                            .expect("An error occured during the download of the records.");
-                        if let Some(world_info) = deserializer::get_world_info(&data) {
-                            worlds_list
-                                .write()
-                                .push(WorldRecord::new(index, name, data, world_info, false));
-                        } else {
-                            tracing::warn!("Invalid world info detected.");
-                        }
-                    }
-                    document::eval(format!("console.log('{:?}')", worlds_list).as_str());
-                },
+                onclick: move |_| async move {update_worlds_list(&mut calculator_connected, &mut worlds_list, true).await;},
                 "Detect calculator"
             }
             img { id: "connect-calculator-svg", src: CONNECT_CALCULATOR_SVG }
@@ -295,13 +317,13 @@ fn ListWorldsPage(
                             if let Some(record) = worlds_list.write().get_mut(world_index) {
                                 let record_index = record.record_index;
                                 record.need_remove = true;
-                                /*document::eval(
+                                document::eval(
                                         format!(
                                             "window.storage.records.splice({record_index}, 1); await window.calculator.installStorage(window.storage, function () {{}}); return null;",
                                         ).as_str(),
                                     )
                                     .await
-                                    .unwrap();*/
+                                    .unwrap();
                             }
                             let index = worlds_list.read()[world_index].record_index;
                             fix_records_idexes(&mut *worlds_list.write(), index);
@@ -341,7 +363,7 @@ fn ListWorldsPage(
                             let world_index = (*selected_world.read()).expect("The page is broken.");
 
                             if let Some(record) = worlds_list.read().get(world_index) {
-                                let data = world_converter::from_v0_1_0_to_0_1_3(&record.world_data);
+                                let data = world_converter::from_v0_1_0_to_0_1_3(&record.world_data); // TODO : Handle fail
 
                                 let eval = document::eval(
                                         format!(
@@ -351,10 +373,8 @@ fn ListWorldsPage(
                                             var blob = new Blob([new Uint8Array(data)], {{
                                                 type: "application/octet-stream",
                                             }});
-                                            var link = document.createElement("a");
-                                            link.href = window.URL.createObjectURL(blob);
-                                            link.download = record.name + "." + record.type;
-                                            link.click();
+                                            record.data = blob;
+                                            await window.calculator.installStorage(window.storage, function () {{}});
                                             return null;"#, record.record_index
                                         )
                                         .as_str(),
@@ -363,6 +383,8 @@ fn ListWorldsPage(
                                 eval.await.unwrap();
                             }
                             selected_world.set(None);
+
+                            update_worlds_list(&mut calculator_connected, &mut worlds_list, false).await;
                         },
                         "Update"
                     }

@@ -13,8 +13,6 @@ pub struct Chunk {
     blocks: [BlockType; BLOCK_COUNT],
     pos: Vector3<isize>,
     pub generated: bool,
-    pub need_new_mesh: bool,
-    pub need_sorting: bool,
 }
 
 #[allow(dead_code)]
@@ -24,8 +22,6 @@ impl Chunk {
             blocks: [BlockType::Air; BLOCK_COUNT],
             pos,
             generated: false,
-            need_new_mesh: true,
-            need_sorting: false,
         }
     }
 

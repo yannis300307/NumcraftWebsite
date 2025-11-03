@@ -1,6 +1,6 @@
-use lz4_flex::{compress, compress_prepend_size, decompress, decompress_size_prepended};
+use lz4_flex::{decompress, decompress_size_prepended};
 use nalgebra::Vector3;
-use postcard::{from_bytes, to_allocvec};
+use postcard::from_bytes;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
@@ -53,7 +53,6 @@ pub struct SaveManager {
     chunks_data: [Vec<u8>; 64],
     pub player_data: PlayerData,
     pub world_info: WorldInfo,
-    pub file_name: Option<String>,
 }
 
 impl SaveManager {
@@ -62,72 +61,13 @@ impl SaveManager {
             chunks_data: [const { Vec::new() }; 64],
             player_data: PlayerData::new(),
             world_info: WorldInfo::new(),
-            file_name: None,
         }
-    }
-
-    pub fn get_current_loaded_world_info(&self) -> &WorldInfo {
-        &self.world_info
-    }
-
-    pub fn set_world_seed(&mut self, seed: i32) {
-        self.world_info.world_seed = seed;
-    }
-
-    pub fn set_world_name(&mut self, world_name: &String) {
-        self.world_info.world_name = world_name.clone();
-    }
-
-    pub fn set_gamemode(&mut self, gamemode: GameMode) {
-        self.world_info.gamemode = gamemode;
     }
 
     pub fn get_game_mode(&self) -> GameMode {
         self.world_info.gamemode
     }
 
-    pub fn set_chunk(&mut self, chunk: &Chunk) -> bool {
-        let pos = chunk.get_pos();
-
-        if pos.x < 0 || pos.x >= 4 || pos.y < 0 || pos.y >= 4 || pos.z < 0 || pos.z >= 4 {
-            return false;
-        }
-
-        let compressed = compress(&chunk.get_all_blocks().map(|b| b as u8));
-
-        let index = (pos.x + pos.y * 4 + pos.z * 16) as usize;
-
-        self.chunks_data[index] = compressed;
-
-        true
-    }
-
-    pub fn get_raw(&self) -> Vec<u8> {
-        let mut data: Vec<u8> = Vec::new();
-
-        let raw_world_info = to_allocvec(&self.world_info).unwrap();
-        data.extend((raw_world_info.len() as u16).to_be_bytes());
-        data.extend(raw_world_info);
-
-        let mut data_to_compress: Vec<u8> = Vec::new();
-
-        for i in 0..self.chunks_data.len() {
-            let size: u16 = self.chunks_data[i].len() as u16;
-            data_to_compress.extend_from_slice(&size.to_be_bytes());
-        }
-
-        for i in 0..self.chunks_data.len() {
-            data_to_compress.extend(&self.chunks_data[i]);
-        }
-
-        let raw_player_data = to_allocvec(&self.player_data).unwrap();
-        data_to_compress.extend((raw_player_data.len() as u16).to_be_bytes());
-        data_to_compress.extend(raw_player_data);
-
-        data.extend_from_slice(&compress_prepend_size(&data_to_compress));
-
-        data
-    }
 
     fn read_world_info(&mut self, data: &[u8]) -> Result<usize, SaveFileLoadError> {
         let mut world_data_offset = 0;
@@ -156,19 +96,6 @@ impl SaveManager {
         } else {
             return Err(SaveFileLoadError::CorruptedWorld);
         }
-    }
-
-    pub fn get_world_info(&self, raw_data: Vec<u8>) -> Option<WorldInfo> {
-        let world_info_size = u16::from_be_bytes([raw_data[0], raw_data[1]]);
-        let raw_data = &raw_data[2..(2 + world_info_size as usize)];
-
-        if let Ok(world_info) = from_bytes::<WorldInfo>(&raw_data) {
-            Some(world_info)
-        } else {
-            None
-        }
-
-        //Some(WorldInfo::new())
     }
 
     pub fn load_from_file(&mut self, raw_data: &Vec<u8>) -> Result<(), SaveFileLoadError> {
@@ -259,30 +186,6 @@ impl SaveManager {
             Err(ChunkReadingError::CorruptedChunk)
         }
     }
-
-    pub fn get_player_pos(&self) -> Vector3<f32> {
-        Vector3::new(
-            self.player_data.pos.0,
-            self.player_data.pos.1,
-            self.player_data.pos.2,
-        )
-    }
-
-    pub fn get_player_inventory(&self) -> Inventory {
-        self.player_data.inventory.clone()
-    }
-
-    pub fn get_player_rot(&self) -> Vector3<f32> {
-        Vector3::new(self.player_data.rotation.0, self.player_data.rotation.1, 0.)
-    }
-
-    pub fn clean(&mut self) {
-        for chunk in self.chunks_data.iter_mut() {
-            chunk.clear();
-        }
-
-        self.player_data = PlayerData::new();
-    }
 }
 
 #[derive(Debug)]
@@ -293,7 +196,6 @@ pub enum ChunkReadingError {
 
 #[derive(Debug)]
 pub enum SaveFileLoadError {
-    FileNotFound,
     CorruptedWorld,
 }
 

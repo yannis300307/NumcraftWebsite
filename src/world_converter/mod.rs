@@ -21,7 +21,11 @@ pub fn from_v0_1_0_to_0_1_3(data: &Vec<u8>) -> Option<Vec<u8>> {
     save_manager_2.set_world_name(&save_manager_1.world_info.world_name);
     save_manager_2.set_world_seed(save_manager_1.world_info.world_seed);
 
-    save_manager_1.player_data.pos = save_manager_2.player_data.pos;
+    save_manager_2.player_data.pos = (
+        4. * 8. - save_manager_1.player_data.pos.0,
+        4. * 8. - save_manager_1.player_data.pos.1,
+        save_manager_1.player_data.pos.2,
+    );
     save_manager_1.player_data.rotation = save_manager_2.player_data.rotation;
     for slot in 0..save_manager_1.player_data.inventory.get_all_slots().len() {
         let old_item_stack: &numcraft_v0_1_0::inventory::ItemStack = save_manager_1
@@ -47,8 +51,10 @@ pub fn from_v0_1_0_to_0_1_3(data: &Vec<u8>) -> Option<Vec<u8>> {
                 let chunk1 = save_manager_1
                     .get_chunk_at_pos(Vector3::new(x, y, z))
                     .ok()?;
-                let mut chunk2 =
-                    crate::world_converter::numcraft_v0_1_3::chunk::Chunk::new(*chunk1.get_pos());
+                let old_pos = *chunk1.get_pos();
+                let mut chunk2 = crate::world_converter::numcraft_v0_1_3::chunk::Chunk::new(
+                    Vector3::new(3 - old_pos.x, 3 - old_pos.y, old_pos.z),
+                );
                 for bx in 0..8 {
                     for by in 0..8 {
                         for bz in 0..8 {
