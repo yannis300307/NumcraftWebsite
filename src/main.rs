@@ -1,10 +1,14 @@
 use dioxus::{logger::tracing, prelude::*};
 
-use crate::{components::alert_dialog::*, deserializer::WorldInfo};
+use crate::{
+    components::alert_dialog::*,
+    deserializer::{UpdateStatus, WorldInfo},
+};
 
 mod components;
 mod deserializer;
 mod js_utils;
+mod world_converter;
 
 const CSS: Asset = asset!("/assets/main.css");
 
@@ -16,6 +20,7 @@ const UPSILON_JS: Asset = asset!(
 const DOWNLOAD_ICON_SVG: Asset = asset!("/assets/download.svg");
 const DELETE_ICON_SVG: Asset = asset!("/assets/delete.svg");
 const UPDATE_ICON_SVG: Asset = asset!("/assets/update.svg");
+const CANT_UPDATE_ICON_SVG: Asset = asset!("/assets/cant_update.svg");
 
 static LOGO: Asset = asset!("/assets/logo.svg");
 static CONNECT_CALCULATOR_SVG: Asset = asset!("/assets/connect_calculator.svg");
@@ -27,6 +32,14 @@ pub struct WorldRecord {
     pub world_data: Vec<u8>,
     pub world_info: WorldInfo,
     pub need_remove: bool,
+}
+
+fn fix_records_idexes(records: &mut Vec<WorldRecord>, start: usize) {
+    for rec in records {
+        if rec.record_index > start {
+            rec.record_index -= 1;
+        }
+    }
 }
 
 impl WorldRecord {
@@ -93,26 +106,28 @@ fn ConnectPage(
                 onclick: move |_| async move {
                     let mut eval = document::eval(
                         r#"if (window.calculator === undefined) {window.calculator = new window.Upsilon()};
-                            await window.calculator.detect(async function() {
-                                window.storage = await window.calculator.backupStorage();
-                                dioxus.send(true);
+                        await window.calculator.detect(async function() {
+                            window.storage = await window.calculator.backupStorage();
+                            dioxus.send(true);
 
 
 
-                                let length = window.storage.records.length;
-                                dioxus.send(length);
-                                for (let i = 0; i < length; i++) {
-                                    if (window.storage.records[i].type == "ncw") {
-                                        dioxus.send(i);
-                                        dioxus.send(window.storage.records[i].name);
-                                        let data = Array.from(new Uint8Array(await window.storage.records[i].data.arrayBuffer()));
-                                        dioxus.send(data);
-                                    }
+
+
+                            let length = window.storage.records.length;
+                            dioxus.send(length);
+                            for (let i = 0; i < length; i++) {
+                                if (window.storage.records[i].type == "ncw") {
+                                    dioxus.send(i);
+                                    dioxus.send(window.storage.records[i].name);
+                                    let data = Array.from(new Uint8Array(await window.storage.records[i].data.arrayBuffer()));
+                                    dioxus.send(data);
                                 }
-                            }, function(error) {
-                                dioxus.send(false);
-                            });
-                            "#,
+                            }
+                        }, function(error) {
+                            dioxus.send(false);
+                        });
+                        "#,
                     );
                     let connected: bool = eval.recv().await.expect("Page has not loaded correctly.");
                     *calculator_connected.write() = connected;
@@ -225,16 +240,31 @@ fn ListWorldsPage(
                                 src: DELETE_ICON_SVG,
                             }
                         }
-                        a {
-                            onclick: move |_| {
-                                selected_world.set(Some(i));
-                                open_update_dialog.set(true)
-                            },
-                            title: "Update to the latest version",
-                            img {
-                                class: "world-button-icon",
-                                src: UPDATE_ICON_SVG,
+                        if worlds_list.read()[i].world_info.world_version.get_update_supported()
+                            == UpdateStatus::CanBeUpdated
+                        {
+                            a {
+                                onclick: move |_| {
+                                    selected_world.set(Some(i));
+                                    open_update_dialog.set(true)
+                                },
+                                title: "Update to the latest version",
+                                img {
+                                    class: "world-button-icon",
+                                    src: UPDATE_ICON_SVG,
+                                }
                             }
+                        } else {
+                            img {
+                                title: match worlds_list.read()[i].world_info.world_version.get_update_supported() {
+                                    UpdateStatus::AlreadyUpdated => "Your world is already up to date or the updater is not released yet.",
+                                    UpdateStatus::CanBeUpdated => "", // There is a problem
+                                    UpdateStatus::TooOld => "The world is too old to be updated.",
+                                    UpdateStatus::Unsupported => "This version is unsupported for updates. Custom build or very old version.",
+                                },
+                                    class: "world-button-icon",
+                                    src: CANT_UPDATE_ICON_SVG,
+                                }
                         }
                     }
                 }
@@ -265,15 +295,19 @@ fn ListWorldsPage(
                             if let Some(record) = worlds_list.write().get_mut(world_index) {
                                 let record_index = record.record_index;
                                 record.need_remove = true;
-                                document::eval(
+                                /*document::eval(
                                         format!(
                                             "window.storage.records.splice({record_index}, 1); await window.calculator.installStorage(window.storage, function () {{}}); return null;",
-                                        )
-                                            .as_str(),
+                                        ).as_str(),
                                     )
                                     .await
-                                    .unwrap();
+                                    .unwrap();*/
                             }
+                            let index = worlds_list.read()[world_index].record_index;
+                            fix_records_idexes(&mut *worlds_list.write(), index);
+
+                            tracing::info!("{:?}", worlds_list.read());
+
                             gloo_timers::future::TimeoutFuture::new(800).await;
                             worlds_list.write().remove(world_index);
                             selected_world.set(None);
@@ -282,7 +316,6 @@ fn ListWorldsPage(
                     }
                 }
             }
-        
         }
         AlertDialogRoot {
             open: *open_update_dialog.read(),
@@ -306,8 +339,28 @@ fn ListWorldsPage(
                     AlertDialogAction {
                         on_click: move |_| async move {
                             let world_index = (*selected_world.read()).expect("The page is broken.");
-                            if let Some(record) = worlds_list.write().get_mut(world_index) {
-                                
+
+                            if let Some(record) = worlds_list.read().get(world_index) {
+                                let data = world_converter::from_v0_1_0_to_0_1_3(&record.world_data);
+
+                                let eval = document::eval(
+                                        format!(
+                                            r#"
+                                            var record = window.storage.records[{}];
+                                            var data = await dioxus.recv();
+                                            var blob = new Blob([new Uint8Array(data)], {{
+                                                type: "application/octet-stream",
+                                            }});
+                                            var link = document.createElement("a");
+                                            link.href = window.URL.createObjectURL(blob);
+                                            link.download = record.name + "." + record.type;
+                                            link.click();
+                                            return null;"#, record.record_index
+                                        )
+                                        .as_str(),
+                                    );
+                                eval.send(data).unwrap();
+                                eval.await.unwrap();
                             }
                             selected_world.set(None);
                         },

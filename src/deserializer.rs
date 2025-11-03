@@ -14,6 +14,14 @@ pub enum WorldVersion {
     UNKNOWN,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateStatus {
+    AlreadyUpdated,
+    CanBeUpdated,
+    TooOld,
+    Unsupported,
+}
+
 impl WorldVersion {
     pub fn get_matching_name(&self) -> String {
         match *self {
@@ -21,6 +29,15 @@ impl WorldVersion {
             WorldVersion::V0_1_0 => "v0.1.0".to_string(),
             WorldVersion::V0_1_3 => "v0.1.3".to_string(),
             WorldVersion::UNKNOWN => "unknown".to_string(),
+        }
+    }
+
+    pub fn get_update_supported(&self) -> UpdateStatus {
+        match *self {
+            WorldVersion::V0_0_7_ => UpdateStatus::TooOld,
+            WorldVersion::V0_1_0 => UpdateStatus::CanBeUpdated,
+            WorldVersion::V0_1_3 => UpdateStatus::AlreadyUpdated,
+            WorldVersion::UNKNOWN => UpdateStatus::Unsupported,
         }
     }
 }
