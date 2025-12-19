@@ -1,8 +1,8 @@
-use dioxus::{logger::tracing, prelude::*};
+use dioxus::{logger::{self, tracing}, prelude::*};
 
 use crate::{
-    components::alert_dialog::*,
-    deserializer::{UpdateStatus, WorldInfo}, world_converter::numcraft_v0_1_0::constants::world,
+    components::alert_dialog::{self, *},
+    deserializer::{UpdateStatus, WorldInfo},
 };
 
 mod components;
@@ -18,6 +18,7 @@ const UPSILON_JS: Asset = asset!(
 );
 
 const DOWNLOAD_ICON_SVG: Asset = asset!("/assets/download.svg");
+const UPLOAD_ICON_SVG: Asset = asset!("/assets/upload.svg");
 const DELETE_ICON_SVG: Asset = asset!("/assets/delete.svg");
 const UPDATE_ICON_SVG: Asset = asset!("/assets/update.svg");
 const CANT_UPDATE_ICON_SVG: Asset = asset!("/assets/cant_update.svg");
@@ -97,7 +98,7 @@ async fn update_worlds_list(
 ) {
     let mut eval = if need_reconnect {
         document::eval(
-        r#"if (window.calculator === undefined) {window.calculator = new window.Upsilon()};
+            r#"if (window.calculator === undefined) {window.calculator = new window.Upsilon()};
                 await window.calculator.detect(async function() {
                     window.storage = await window.calculator.backupStorage();
                     dioxus.send(true);
@@ -116,9 +117,9 @@ async fn update_worlds_list(
                 });
                 "#,
         )
-        } else {
-            document::eval(
-        r#"window.storage = await window.calculator.backupStorage();
+    } else {
+        document::eval(
+            r#"window.storage = await window.calculator.backupStorage();
                     dioxus.send(true);
                     let length = window.storage.records.length;
                     dioxus.send(length);
@@ -130,9 +131,10 @@ async fn update_worlds_list(
                             dioxus.send(data);
                         }
                     }
-                "#)
-        };
-    
+                "#,
+        )
+    };
+
     let connected: bool = eval.recv().await.expect("Page has not loaded correctly.");
     *calculator_connected.write() = connected;
     let array_length: usize = eval
@@ -179,12 +181,28 @@ fn ConnectPage(
 
             button {
                 id: "connect-button",
-                onclick: move |_| async move {update_worlds_list(&mut calculator_connected, &mut worlds_list, true).await;},
+                onclick: move |_| async move {
+                    update_worlds_list(&mut calculator_connected, &mut worlds_list, true).await;
+                },
                 "Detect calculator"
             }
             img { id: "connect-calculator-svg", src: CONNECT_CALCULATOR_SVG }
         }
     )
+}
+
+fn get_next_filename(worlds_list: &Vec<WorldRecord>) -> Option<String> {
+    // If we get to 100, there is a problem ... I'm doing this to set a limit to avoid having an infinite loop
+    'counter: for i in 0..100 {
+        let name_candidate = format!("world{i}");
+        for world in worlds_list.iter() {
+            if world.file_name == name_candidate {
+                continue 'counter;
+            }
+        }
+        return Some(name_candidate);
+    }
+    None
 }
 
 #[component]
@@ -194,6 +212,7 @@ fn ListWorldsPage(
 ) -> Element {
     let mut open_delete_dialog = use_signal(|| false);
     let mut open_update_dialog = use_signal(|| false);
+    let mut open_update_error = use_signal(|| false);
     let mut selected_world: Signal<Option<usize>> = use_signal(|| None);
     rsx!(
         div {
@@ -279,19 +298,68 @@ fn ListWorldsPage(
                         } else {
                             img {
                                 title: match worlds_list.read()[i].world_info.world_version.get_update_supported() {
-                                    UpdateStatus::AlreadyUpdated => "Your world is already up to date or the updater is not released yet.",
-                                    UpdateStatus::CanBeUpdated => "", // There is a problem
+                                    UpdateStatus::AlreadyUpdated => {
+                                        "Your world is already up to date or the updater is not released yet."
+                                    }
+                                    UpdateStatus::CanBeUpdated => "",
                                     UpdateStatus::TooOld => "The world is too old to be updated.",
-                                    UpdateStatus::Unsupported => "This version is unsupported for updates. Custom build or very old version.",
+                                    UpdateStatus::Unsupported => {
+                                        "This version is unsupported for updates. Custom build or very old version."
+                                    }
                                 },
-                                    class: "world-button-icon",
-                                    src: CANT_UPDATE_ICON_SVG,
-                                }
+                                class: "world-button-icon",
+                                src: CANT_UPDATE_ICON_SVG,
+                            }
                         }
                     }
                 }
+                a { title: "Upload a world", onclick: move |_| async move { document::eval("document.getElementById(\"upload_file_picker\").click();"); }, img { id: "upload-button", class: "world-button-icon", src: UPLOAD_ICON_SVG } }
+                input { id: "upload_file_picker", accept: ".ncw", type: "file", hidden: true, multiple: true, onchange: move |e| {
+                async move {
+                    let files = e.files();
+                        for f in &files {
+                            let data = f.read_bytes().await.expect("Unable to read the imported file.").to_vec();
+                            let name = get_next_filename(&worlds_list.read()).expect("Unable to find a world name.");
+                            let eval = document::eval(
+                                        format!(
+                                            r#"
+                                            var data = await dioxus.recv();
+                                            var blob = new Blob([new Uint8Array(data)], {{
+                                                type: "application/octet-stream",
+                                            }});
+                                            var name = "{}";
+                                            console.log(name);
+                                            window.storage.records.push({{name, type: "ncw", data: blob}});
+                                            await window.calculator.installStorage(window.storage, function () {{}});
+                                            return null;"#,
+                                            name,
+                                        )
+                                            .as_str(),
+                                    );
+                                    eval.send(data).unwrap();
+                                    eval.await.unwrap();
+                                    update_worlds_list(&mut calculator_connected, &mut worlds_list, false).await;
+                        }
+                    }
+                }
+                }
             }
         }
+
+        AlertDialogRoot {
+            open: *open_update_error.read(),
+            on_open_change: move |v| open_update_error.set(v),
+            AlertDialogContent {
+                AlertDialogTitle { "An error occured during the conversion" }
+                AlertDialogDescription {
+                    "The conversion of the world failed. Your world may be too old or corrupted."
+                }
+                AlertDialogActions {
+                    AlertDialogCancel { "Ok" }
+                }
+            }
+        }
+
         AlertDialogRoot {
             open: *open_delete_dialog.read(),
             on_open_change: move |v| open_delete_dialog.set(v),
@@ -320,16 +388,15 @@ fn ListWorldsPage(
                                 document::eval(
                                         format!(
                                             "window.storage.records.splice({record_index}, 1); await window.calculator.installStorage(window.storage, function () {{}}); return null;",
-                                        ).as_str(),
+                                        )
+                                            .as_str(),
                                     )
                                     .await
                                     .unwrap();
                             }
                             let index = worlds_list.read()[world_index].record_index;
                             fix_records_idexes(&mut *worlds_list.write(), index);
-
                             tracing::info!("{:?}", worlds_list.read());
-
                             gloo_timers::future::TimeoutFuture::new(800).await;
                             worlds_list.write().remove(world_index);
                             selected_world.set(None);
@@ -363,9 +430,10 @@ fn ListWorldsPage(
                             let world_index = (*selected_world.read()).expect("The page is broken.");
 
                             if let Some(record) = worlds_list.read().get(world_index) {
-                                let data = world_converter::from_v0_1_0_to_0_1_3(&record.world_data); // TODO : Handle fail
-
-                                let eval = document::eval(
+                                if let Some(data) = world_converter::from_v0_1_0_to_0_1_3(
+                                    &record.world_data,
+                                ) {
+                                    let eval = document::eval(
                                         format!(
                                             r#"
                                             var record = window.storage.records[{}];
@@ -375,15 +443,19 @@ fn ListWorldsPage(
                                             }});
                                             record.data = blob;
                                             await window.calculator.installStorage(window.storage, function () {{}});
-                                            return null;"#, record.record_index
+                                            return null;"#,
+                                            record.record_index,
                                         )
-                                        .as_str(),
+                                            .as_str(),
                                     );
-                                eval.send(data).unwrap();
-                                eval.await.unwrap();
+                                    eval.send(data).unwrap();
+                                    eval.await.unwrap();
+                                } else {
+                                    open_update_dialog.set(false);
+                                    open_update_error.set(true);
+                                }
                             }
                             selected_world.set(None);
-
                             update_worlds_list(&mut calculator_connected, &mut worlds_list, false).await;
                         },
                         "Update"
